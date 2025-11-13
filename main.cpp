@@ -3,7 +3,6 @@
 #include <vector>
 #include <string>
 #include <sstream>
-#include <queue>
 #include <climits>
 
 int MaxJobs, MaxProcs;
@@ -56,51 +55,30 @@ int process_datafile(const char *datafile_name, std::vector<task_t> &tasks)
 std::vector<std::vector<int>>& schedule_tasks(const std::vector<task_t> &tasks, std::vector<std::vector<int>> &schedule)
 {
     std::vector<int> procs_workload(MaxProcs, 0);      // Current workload of processors. Value assigned to each proc id is time of release
+    std::vector<bool> is_proc_used(MaxProcs, false);
     int free_procs = MaxProcs;
 
-    int min_release_time;
-
     int time = 0;
+    
     for(task_t task : tasks)
     {
-        time = std::max(task.submit_time, time);
-        for(int p : procs_workload)
-            {
-                if(free_procs >= MaxProcs)
-                    break;
-                if(p <= time){
-                    free_procs++;
-                }
-            }
-        while(free_procs < task.procs)
+        // while(free_procs < task.procs)
         {
-            min_release_time = INT_MAX;
-            for(int p : procs_workload)
-            {
-                if(free_procs >= MaxProcs)
-                    break;
-                if(p <= time){
-                    free_procs++;
-                    min_release_time = std::min(min_release_time, p);
-                }
-            }
-            time = min_release_time;
-            // std::cout << "time\t" << "min_release_time\t" << "free_procs\n";
-            // std::cout << time << "\t" << min_release_time << "\t" << free_procs << "\n";
-            // std::cout << "XD";
+            
         }
-        
+        std::cout << "freeprocs: " << free_procs << '\n';
         std::vector<int> assigned_procsid;
         int assigned_procs = 0;
-        free_procs -= task.procs;
         for(int i = 0; i < MaxProcs; ++i)
         {
             if(assigned_procs >= task.procs) break;
             if(procs_workload[i] <= time)
             {
                 procs_workload[i] = time + task.run_time;
+                is_proc_used[i] = true;
                 assigned_procsid.push_back(i);
                 assigned_procs++;
+                free_procs--;
             }
         }
         
@@ -119,7 +97,7 @@ std::vector<std::vector<int>>& schedule_tasks(const std::vector<task_t> &tasks, 
         {
             std::cout << j << "\t";
         }
-        std::cout << "(needed " << tasks[temp].procs << ")\n";
+        std::cout << "(needed " << tasks[temp].procs << ") free_proc: " << free_procs << " taskproc: " << tasks[temp].procs << "\n";
         temp++;
     }
     return schedule;
@@ -144,12 +122,12 @@ int main(int argc, char **argv)
     std::vector<task_t> tasks;
     std::vector<std::vector<int>> schedule;
     int test = process_datafile(argv[1], tasks);
-    // std::cout << "number\t" << "r_j\t" << "p_j\t" << "size_j\n";
-    // for(task_t s : tasks)
-    // {
-    //     std::cout << s.number << "\t" << s.submit_time << "\t" << s.run_time << "\t" << s.procs << '\n';
-    // }
-    // std::cout << MaxJobs << ' ' << MaxProcs;
+    std::cout << "number\t" << "r_j\t" << "p_j\t" << "size_j\n";
+    for(task_t s : tasks)
+    {
+        std::cout << s.number << "\t" << s.submit_time << "\t" << s.run_time << "\t" << s.procs << '\n';
+    }
+    std::cout << MaxProcs << '\n';
     schedule_tasks(tasks, schedule);
     export_to_file(schedule);
 }
