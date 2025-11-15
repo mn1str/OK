@@ -19,37 +19,46 @@ struct task_t
     int procs;
 };
 
-int process_datafile(const char *datafile_name, std::vector<task_t> &tasks)
+int process_datafile(const char *datafile_name, int tasks_number, std::vector<task_t> &tasks)
 {
     std::ifstream datafile_stream;
     datafile_stream.open(datafile_name, std::ios_base::in);
-
+    int n = 0;
     std::string current_line;
     while(std::getline(datafile_stream, current_line))
     {
+        if(n >= tasks_number)
+            break;
         int temp_number = -1, temp_rj = -1, temp_pj = -1, temp_sizej = -1, test = -1;
         std::stringstream current_line_stream(current_line);
         if(current_line[0] == ';')
         {
-            if(current_line.find("; MaxJobs: ") != std::string_view::npos)
+            auto MaxJobsPos = current_line.find("MaxJobs: ");
+            auto MaxProcsPos = current_line.find("MaxProcs: ");
+            if(MaxJobsPos != std::string_view::npos)
             {
-                current_line_stream.seekg(11);
+                current_line_stream.seekg(MaxJobsPos + 9);
                 current_line_stream >> MaxJobs;
             }
-            if(current_line.find("; MaxProcs: ") != std::string_view::npos)
+            if(MaxProcsPos != std::string_view::npos)
             {
-                current_line_stream.seekg(12);
+                current_line_stream.seekg(MaxProcsPos + 10);
                 current_line_stream >> MaxProcs;
             }
             continue;
         }
-
+        n++;
         current_line_stream >> temp_number >> temp_rj >> test >> temp_pj >> temp_sizej;
         if(temp_pj <= 0 || temp_sizej <= 0)
             continue;
 
         task_t current_job {temp_number, temp_rj, temp_pj, temp_sizej};
         tasks.push_back(current_job);
+    }
+    std::cout << "MaxProcs: " << MaxProcs << " MaxJobs: " << MaxJobs << '\n';
+    for(task_t task : tasks)
+    {
+        std::cout << task.number << ' ' << task.submit_time << ' ' << task.run_time << ' ' << task.procs << '\n';
     }
     return 0;
 }
@@ -65,10 +74,10 @@ int schedule_tasks(std::vector<task_t> &tasks, std::vector<std::vector<int>> &sc
 
     std::vector<task_t> tasks_list(tasks.begin(), tasks.end());
     // std::cout << "sigma";
-    for(auto i : tasks_list)
-    {   
-        std::cout << i.number << '\n';
-    }
+    // for(auto i : tasks_list)
+    // {   
+    //     std::cout << i.number << '\n';
+    // }
 
 
     int time = 0;
@@ -77,7 +86,7 @@ int schedule_tasks(std::vector<task_t> &tasks, std::vector<std::vector<int>> &sc
         for(int i = 0; i < tasks_list.size(); ++i)
         {
             if(tasks_list[i].submit_time > time)
-                break;
+                continue;
 
             std::vector<int> assigned_procs_ids;
             int assigned_procs_count = 0;
@@ -106,8 +115,6 @@ int schedule_tasks(std::vector<task_t> &tasks, std::vector<std::vector<int>> &sc
                 current_task.push_back(i);
             }
             schedule.push_back(current_task);
-            // std::swap(tasks_list[i], tasks_list.back());
-            // tasks_list.pop_back();
             tasks_list.erase(tasks_list.begin() + i);
             i--;
         }
@@ -125,7 +132,7 @@ int schedule_tasks(std::vector<task_t> &tasks, std::vector<std::vector<int>> &sc
         if (min_release_time == INT_MAX)
             break;
         time = min_release_time;
-        std::cout << time << "\n";
+        // std::cout << time << "\n";
     }
 
     
@@ -134,7 +141,7 @@ int schedule_tasks(std::vector<task_t> &tasks, std::vector<std::vector<int>> &sc
 
 void export_to_file(const std::vector<std::vector<int>> &schedule)
 {
-    std::ofstream of("schedule");
+    std::ofstream of("./schedule");
     for(const std::vector<int> &i : schedule)
     { 
         for(int j : i)
@@ -151,7 +158,7 @@ int main(int argc, char **argv)
     std::ios_base::sync_with_stdio(false);
     std::vector<task_t> tasks;
     std::vector<std::vector<int>> schedule;
-    int test = process_datafile("./testunits/test-n10k-m128-r0-0.txt", tasks);
+    int test = process_datafile(argv[1], atoi(argv[2]), tasks);
     // std::cout << "number\t" << "r_j\t" << "p_j\t" << "size_j\n";
     // for(task_t s : tasks)
     // {
