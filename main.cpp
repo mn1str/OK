@@ -9,7 +9,13 @@
 #include <list>
 #include <algorithm>
 
+#ifdef __linux__
+#include <unistd.h>
+#include <signal.h>
+#endif
+
 int MaxJobs, MaxProcs;
+bool should_close = 0;
 
 struct task_t
 {
@@ -23,6 +29,11 @@ int process_datafile(const char *datafile_name, int tasks_number, std::vector<ta
 {
     std::ifstream datafile_stream;
     datafile_stream.open(datafile_name, std::ios_base::in);
+    if(datafile_stream.fail())
+    {
+        std::cerr << "Nie znaleziono pliku " << datafile_name << ".\n";
+        return 0;
+    }
     int n = 0;
     std::string current_line;
     while(std::getline(datafile_stream, current_line))
@@ -35,12 +46,12 @@ int process_datafile(const char *datafile_name, int tasks_number, std::vector<ta
         {
             auto MaxJobsPos = current_line.find("MaxJobs: ");
             auto MaxProcsPos = current_line.find("MaxProcs: ");
-            if(MaxJobsPos != std::string_view::npos)
+            if(MaxJobsPos != std::string::npos)
             {
                 current_line_stream.seekg(MaxJobsPos + 9);
                 current_line_stream >> MaxJobs;
             }
-            if(MaxProcsPos != std::string_view::npos)
+            if(MaxProcsPos != std::string::npos)
             {
                 current_line_stream.seekg(MaxProcsPos + 10);
                 current_line_stream >> MaxProcs;
@@ -55,36 +66,26 @@ int process_datafile(const char *datafile_name, int tasks_number, std::vector<ta
         task_t current_job {temp_number, temp_rj, temp_pj, temp_sizej};
         tasks.push_back(current_job);
     }
-    std::cout << "MaxProcs: " << MaxProcs << " MaxJobs: " << MaxJobs << '\n';
-    for(task_t task : tasks)
-    {
-        std::cout << task.number << ' ' << task.submit_time << ' ' << task.run_time << ' ' << task.procs << '\n';
-    }
-    return 0;
+    return 1;
 }
 
 
 
-int schedule_tasks(std::vector<task_t> &tasks, std::vector<std::vector<int>> &schedule)
+int schedule_tasks(const std::vector<task_t> &tasks, std::vector<std::vector<int>> &schedule)
 {
     std::vector<int> procs_workload(MaxProcs, -1);      // Current workload of processors. Value assigned to each proc id is time of release
     std::vector<bool> proc_isUsed(MaxProcs, false);
 
-    std::sort(tasks.begin(), tasks.end(), [](task_t& t1, task_t& t2){return t1.run_time < t2.run_time;});
-
     std::vector<task_t> tasks_list(tasks.begin(), tasks.end());
-    // std::cout << "sigma";
-    // for(auto i : tasks_list)
-    // {   
-    //     std::cout << i.number << '\n';
-    // }
-
+    std::sort(tasks_list.begin(), tasks_list.end(), [](task_t& t1, task_t& t2){return t1.run_time < t2.run_time;});
 
     int time = 0;
     while(!tasks_list.empty())
     {
         for(int i = 0; i < tasks_list.size(); ++i)
         {
+            if(should_close)
+                return 2;
             if(tasks_list[i].submit_time > time)
                 continue;
 
@@ -132,11 +133,10 @@ int schedule_tasks(std::vector<task_t> &tasks, std::vector<std::vector<int>> &sc
         if (min_release_time == INT_MAX)
             break;
         time = min_release_time;
-        // std::cout << time << "\n";
     }
 
     
-    return 0;
+    return 1;
 }
 
 void export_to_file(const std::vector<std::vector<int>> &schedule)
@@ -152,21 +152,38 @@ void export_to_file(const std::vector<std::vector<int>> &schedule)
     }
 }
 
+void alarm_handling(int a)
+{
+    should_close = 1;
+}
+
 int main(int argc, char **argv)
 {
-    auto begin = std::chrono::high_resolution_clock::now();
     std::ios_base::sync_with_stdio(false);
+    if(argc != 3 || !atoi(argv[2]))
+    {
+        std::cerr << "Poprawne uzycie: " << argv[0] << " [nazwa pliku] [liczba zadan]\n";
+        return 1;
+    }
+
     std::vector<task_t> tasks;
     std::vector<std::vector<int>> schedule;
-    int test = process_datafile(argv[1], atoi(argv[2]), tasks);
-    // std::cout << "number\t" << "r_j\t" << "p_j\t" << "size_j\n";
-    // for(task_t s : tasks)
-    // {
-    //     std::cout << s.number << "\t" << s.submit_time << "\t" << s.run_time << "\t" << s.procs << '\n';
-    // }
-    // std::cout << MaxProcs << '\n';
+
+    if(!process_datafile(argv[1], atoi(argv[2]), tasks))
+    {
+        std::cerr << "Blad podczas wczytywania z pliku.\n";
+        return 1;
+    }
+
+    #ifdef __linux__
+    signal(SIGALRM, alarm_handling);
+    alarm(300);
+    #endif
+
+    auto begin = std::chrono::high_resolution_clock::now();
     schedule_tasks(tasks, schedule);
-    export_to_file(schedule);
     auto end = std::chrono::high_resolution_clock::now();
     std::cout << "Execution time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "ms\n";
+
+    export_to_file(schedule);
 }
