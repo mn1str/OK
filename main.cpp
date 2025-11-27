@@ -17,9 +17,8 @@ std::atomic<bool> should_close(false);
 
 #ifdef LIMIT
 void alarm_thread() {
-    std::this_thread::sleep_for(std::chrono::seconds(LIMIT));
+    std::this_thread::sleep_for(std::chrono::minutes(LIMIT));
     should_close.store(true);
-    std::cout << "\n[!] LIMIT CZASU UPŁYNĄŁ. Ustawiono 'should_close' na TRUE." << std::endl;
 }
 #endif
 
