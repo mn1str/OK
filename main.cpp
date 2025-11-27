@@ -8,14 +8,25 @@
 #include <chrono>
 #include <list>
 #include <algorithm>
+#include <atomic>
+#include <thread>
 
-#ifdef __linux__
-#include <unistd.h>
-#include <signal.h>
+#define LIMIT 5
+
+std::atomic<bool> should_close(false);
+
+#ifdef LIMIT
+void alarm_thread() {
+    std::this_thread::sleep_for(std::chrono::seconds(LIMIT));
+    should_close.store(true);
+    std::cout << "\n[!] LIMIT CZASU UPŁYNĄŁ. Ustawiono 'should_close' na TRUE." << std::endl;
+}
 #endif
 
+
 int MaxJobs, MaxProcs;
-bool should_close = 0;
+unsigned long long sumCj = 0;
+// bool should_close = 0;
 
 struct task_t
 {
@@ -58,11 +69,10 @@ int process_datafile(const char *datafile_name, int tasks_number, std::vector<ta
             }
             continue;
         }
-        n++;
         current_line_stream >> temp_number >> temp_rj >> test >> temp_pj >> temp_sizej;
         if(temp_pj <= 0 || temp_sizej <= 0)
             continue;
-
+        n++;
         task_t current_job {temp_number, temp_rj, temp_pj, temp_sizej};
         tasks.push_back(current_job);
     }
@@ -84,8 +94,7 @@ int schedule_tasks(const std::vector<task_t> &tasks, std::vector<std::vector<int
     {
         for(int i = 0; i < tasks_list.size(); ++i)
         {
-            if(should_close)
-                return 2;
+            if(should_close.load()) break;
             if(tasks_list[i].submit_time > time)
                 continue;
 
@@ -118,8 +127,9 @@ int schedule_tasks(const std::vector<task_t> &tasks, std::vector<std::vector<int
             schedule.push_back(current_task);
             tasks_list.erase(tasks_list.begin() + i);
             i--;
+            sumCj += schedule.back()[2];
         }
-        
+        if(should_close.load()) break;
         int min_release_time = INT_MAX;
         for(int i = 0; i < tasks_list.size(); ++i)
         {
@@ -134,7 +144,6 @@ int schedule_tasks(const std::vector<task_t> &tasks, std::vector<std::vector<int
             break;
         time = min_release_time;
     }
-
     
     return 1;
 }
@@ -150,11 +159,6 @@ void export_to_file(const std::vector<std::vector<int>> &schedule)
         }
         of << '\n';
     }
-}
-
-void alarm_handling(int a)
-{
-    should_close = 1;
 }
 
 int main(int argc, char **argv)
@@ -175,15 +179,25 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    #ifdef __linux__
-    signal(SIGALRM, alarm_handling);
-    alarm(300);
+    #ifdef LIMIT
+        std::thread alarm(alarm_thread);
     #endif
-
     auto begin = std::chrono::high_resolution_clock::now();
     schedule_tasks(tasks, schedule);
     auto end = std::chrono::high_resolution_clock::now();
-    std::cout << "Execution time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "ms\n";
+    #ifdef LIMIT
+    if (alarm.joinable()) {
+        alarm.join();
+    }
+    #endif
+    long long Cmax = -1;
+    for(std::vector<int> i : schedule)
+    {
+        Cmax = std::max(static_cast<long long>(i[2]), Cmax);
+    }
+    std::cout << "Cmax: " << Cmax << '\n';
+    std::cout << "SumCj: " << sumCj << '\n';
+    std::cout << "Execution time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "\n";
 
     export_to_file(schedule);
 }
