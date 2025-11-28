@@ -4,28 +4,21 @@
 #include <string>
 #include <sstream>
 #include <climits>
-#include <queue>
 #include <chrono>
-#include <list>
 #include <algorithm>
-#include <atomic>
 #include <thread>
 
-#define LIMIT 5
+#ifdef __linux__
 
-std::atomic<bool> should_close(false);
+#include <unistd.h>
+#include <signal.h>
 
-#ifdef LIMIT
-void alarm_thread() {
-    std::this_thread::sleep_for(std::chrono::minutes(LIMIT));
-    should_close.store(true);
-}
 #endif
-
 
 int MaxJobs, MaxProcs;
 unsigned long long sumCj = 0;
-// bool should_close = 0;
+
+bool should_close = false;
 
 struct task_t
 {
@@ -93,7 +86,7 @@ int schedule_tasks(const std::vector<task_t> &tasks, std::vector<std::vector<int
     {
         for(int i = 0; i < tasks_list.size(); ++i)
         {
-            if(should_close.load()) break;
+            if(should_close) return 2;
             if(tasks_list[i].submit_time > time)
                 continue;
 
@@ -128,7 +121,6 @@ int schedule_tasks(const std::vector<task_t> &tasks, std::vector<std::vector<int
             i--;
             sumCj += schedule.back()[2];
         }
-        if(should_close.load()) break;
         int min_release_time = INT_MAX;
         for(int i = 0; i < tasks_list.size(); ++i)
         {
@@ -160,6 +152,11 @@ void export_to_file(const std::vector<std::vector<int>> &schedule)
     }
 }
 
+void alarm_handling(int a)
+{
+    should_close = true;
+}
+
 int main(int argc, char **argv)
 {
     std::ios_base::sync_with_stdio(false);
@@ -178,17 +175,16 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    #ifdef LIMIT
-        std::thread alarm(alarm_thread);
+    #ifdef __linux__
+    signal(SIGALRM, alarm_handling);
+    alarm(300);
     #endif
+
     auto begin = std::chrono::high_resolution_clock::now();
     schedule_tasks(tasks, schedule);
     auto end = std::chrono::high_resolution_clock::now();
-    #ifdef LIMIT
-    if (alarm.joinable()) {
-        alarm.join();
-    }
-    #endif
+
+
     long long Cmax = -1;
     for(std::vector<int> i : schedule)
     {
