@@ -4,7 +4,6 @@
 #include <string>
 #include <sstream>
 #include <climits>
-#include <chrono>
 #include <algorithm>
 #include <thread>
 
@@ -124,6 +123,7 @@ int schedule_tasks(const std::vector<task_t> &tasks, std::vector<std::vector<int
         int min_release_time = INT_MAX;
         for(int i = 0; i < tasks_list.size(); ++i)
         {
+            if(should_close) return 2;
             if(tasks_list[i].submit_time > time)
                 min_release_time = std::min(tasks_list[i].submit_time, min_release_time);
         }
@@ -180,10 +180,7 @@ int main(int argc, char **argv)
     alarm(300);
     #endif
 
-    auto begin = std::chrono::high_resolution_clock::now();
     schedule_tasks(tasks, schedule);
-    auto end = std::chrono::high_resolution_clock::now();
-
 
     long long Cmax = -1;
     for(std::vector<int> i : schedule)
@@ -192,7 +189,6 @@ int main(int argc, char **argv)
     }
     std::cout << "Cmax: " << Cmax << '\n';
     std::cout << "SumCj: " << sumCj << '\n';
-    std::cout << "Execution time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "\n";
 
     export_to_file(schedule);
 }
